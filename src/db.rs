@@ -126,6 +126,51 @@ pub fn register_error(conn: &Connection, site: &str, message: &str, retry_days: 
     Ok(())
 }
 
+pub fn mark_done(conn: &Connection, url: &str) -> Result<()> {
+    conn.execute(
+        "
+        UPDATE crawl_queue
+        SET status = 'done',
+            fetched_at = datetime('now')
+        WHERE url = ?1
+        ",
+        [url],
+    )?;
+
+    Ok(())
+}
+
+pub fn next_pending(conn: &Connection, limit: usize) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT url FROM crawl_queue
+        WHERE status = 'pending'
+        AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))
+        LIMIT ?1
+        ",
+    )?;
+
+    let rows = stmt.query_map([limit as i64], |row| row.get::<_, String>(0))?;
+
+    let mut urls = Vec::new();
+    for url in rows {
+        urls.push(url?);
+    }
+
+    Ok(urls)
+}
+
+pub fn enqueue(conn: &Connection, url: &str, parent: Option<&str>) -> Result<bool> {
+    let rows = conn.execute(
+        "INSERT OR IGNORE INTO crawl_queue
+         (url, parent_url, status, discovered_at)
+         VALUES (?1, ?2, 'pending', datetime('now'))",
+        (url, parent),
+    )?;
+
+    Ok(rows > 0) // true if newly inserted
+}
+
 // Fetch all contents for JSON export
 pub fn fetch_all(conn: &Connection) -> Result<Vec<Content>> {
     let mut stmt = conn.prepare(
