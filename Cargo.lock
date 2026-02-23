@@ -906,6 +906,7 @@ dependencies = [
  "thiserr",
  "thiserror",
  "tokio",
+ "url",
 ]
 
 [[package]]
