@@ -16,15 +16,15 @@ pub struct Content {
 
 // Initialize database and table
 pub fn init(conn: &Connection) -> Result<()> {
-    // Enable WAL mode (safer for SD cards)
     conn.execute_batch(
         "
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
 
+        -- Stored contents (blog / youtube etc.)
         CREATE TABLE IF NOT EXISTS contents (
             id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,            -- youtube or blog
+            type TEXT NOT NULL,
             title TEXT NOT NULL,
             url TEXT NOT NULL,
             description TEXT,
@@ -34,7 +34,24 @@ pub fn init(conn: &Connection) -> Result<()> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_published_at
-        ON contents (published_at);
+            ON contents (published_at);
+
+        -- Crawl queue (HTML only, same domain)
+        CREATE TABLE IF NOT EXISTS crawl_queue (
+            url TEXT PRIMARY KEY,
+            parent_url TEXT,
+            status TEXT NOT NULL, -- pending / done / error
+            discovered_at TEXT NOT NULL,
+            fetched_at TEXT,
+            retry_count INTEGER DEFAULT 0,
+            next_retry_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_crawl_status
+            ON crawl_queue(status);
+
+        CREATE INDEX IF NOT EXISTS idx_crawl_retry
+            ON crawl_queue(next_retry_at);
         ",
     )?;
 
